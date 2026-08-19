@@ -11,5 +11,5 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`TeamBeacon API running on port ${PORT}`);
+  console.log(`TeamBeacon backend running on port ${PORT}`);
 });
