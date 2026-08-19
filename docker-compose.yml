@@ -1,0 +1,23 @@
+services:
+  backend:
+    build:
+      context: ./apps/backend
+    ports:
+      - "8080:3000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: teambeacon
+      DB_USER: teambeacon
+      DB_PASSWORD: teambeacon
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: teambeacon
+      POSTGRES_USER: teambeacon
+      POSTGRES_PASSWORD: teambeacon
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
