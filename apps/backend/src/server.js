@@ -70,7 +70,122 @@ app.post('/messages', async (req, res) => {
   }
 });
 
+app.get('/teams', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM teams ORDER BY id'
+    );
 
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Failed to get teams:', error);
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get teams'
+    });
+  }
+});
+app.post('/teams', async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Team name is required'
+      });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO teams (name) VALUES ($1) RETURNING *',
+      [name.trim()]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({
+        status: 'error',
+        message: 'Team already exists'
+      });
+    }
+
+    console.error('Failed to create team:', error);
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to create team'
+    });
+  }
+});
+app.get('/members', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        members.id,
+        members.name,
+        members.team_id,
+        teams.name AS team_name,
+        members.created_at
+      FROM members
+      JOIN teams
+        ON members.team_id = teams.id
+      ORDER BY members.id
+    `);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Failed to get members:', error);
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get members'
+    });
+  }
+});
+app.post('/members', async (req, res) => {
+  try {
+    const { name, team_id } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Member name is required'
+      });
+    }
+
+    if (!Number.isInteger(team_id)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Valid team_id is required'
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO members (name, team_id)
+       VALUES ($1, $2)
+       RETURNING *`,
+      [name.trim(), team_id]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23503') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Team does not exist'
+      });
+    }
+
+    console.error('Failed to create member:', error);
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to create member'
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`TeamBeacon backend running on port ${PORT}`);
 });
