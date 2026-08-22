@@ -10,6 +10,14 @@ services:
       DB_NAME: teambeacon
       DB_USER: teambeacon
       DB_PASSWORD: teambeacon
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:3000/health').then(res => { if (!res.ok) { process.exit(1); } }).catch(() => process.exit(1));" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
   postgres:
     image: postgres:16-alpine
     environment:
@@ -19,6 +27,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./apps/backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U teambeacon -d teambeacon" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
