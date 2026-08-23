@@ -1,7 +1,28 @@
 const express = require('express');
 const pool = require('./db');
-
+const crypto = require('crypto');
 const app = express();
+app.use((req, res, next) => {
+  const start = Date.now();
+  const request_id = req.get('X-Request-Id') || crypto.randomUUID();
+
+  req.requestId = request_id;
+  res.setHeader('X-Request-Id', request_id);
+  res.on('finish', () => {
+    const level = res.statusCode >= 500 ? 'error' : 'info';
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level,
+      request_id,
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      duration_ms: Date.now() - start
+    }));
+  });
+
+  next();
+});
 app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
@@ -186,6 +207,7 @@ app.post('/members', async (req, res) => {
     });
   }
 });
+
 app.listen(PORT, () => {
   console.log(`TeamBeacon backend running on port ${PORT}`);
 });
