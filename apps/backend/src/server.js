@@ -1,7 +1,19 @@
 const express = require('express');
 const pool = require('./db');
 const crypto = require('crypto');
+const client = require('prom-client');
 const app = express();
+const httpRequestCounter = new client.Counter({
+  name: 'teambeacon_http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'path', 'status']
+});
+const httpRequestDuration = new client.Histogram({
+  name: 'teambeacon_http_request_duration_seconds',
+  help: 'HTTP request duration in seconds',
+  labelNames: ['method', 'path', 'status'],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5]
+});
 app.use((req, res, next) => {
   const start = Date.now();
   const request_id = req.get('X-Request-Id') || crypto.randomUUID();
@@ -10,6 +22,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', request_id);
   res.on('finish', () => {
     const level = res.statusCode >= 500 ? 'error' : 'info';
+    const duration = Date.now() - start;
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       level,
@@ -17,8 +30,21 @@ app.use((req, res, next) => {
       method: req.method,
       path: req.originalUrl,
       status: res.statusCode,
-      duration_ms: Date.now() - start
+      duration_ms: duration
     }));
+    httpRequestCounter.inc({
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode
+    });
+    httpRequestDuration.observe(
+      {
+        method: req.method,
+        path: req.originalUrl,
+        status: res.statusCode
+      },
+      duration / 1000
+    );
   });
 
   next();
@@ -207,7 +233,10 @@ app.post('/members', async (req, res) => {
     });
   }
 });
-
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
 app.listen(PORT, () => {
   console.log(`TeamBeacon backend running on port ${PORT}`);
 });
