@@ -18,9 +18,139 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 1,
+    "id": 2,
     "links": [],
     "panels": [
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "teambeacon-prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "max": 99,
+                    "min": -1,
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": 0
+                            },
+                            {
+                                "color": "red",
+                                "value": 80
+                            }
+                        ]
+                    },
+                    "unit": "percent"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "id": 6,
+            "options": {
+                "minVizHeight": 75,
+                "minVizWidth": 75,
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showThresholdLabels": false,
+                "showThresholdMarkers": true,
+                "sizing": "auto"
+            },
+            "pluginVersion": "12.1.1",
+            "targets": [
+                {
+                    "editorMode": "code",
+                    "expr": "100 *\nrate(\n  container_cpu_usage_seconds_total{\n    container_label_com_docker_compose_service=\"backend\"\n  }[1m]\n)\n/\n(\n  container_spec_cpu_quota{\n    container_label_com_docker_compose_service=\"backend\"\n  }\n  /\n  container_spec_cpu_period{\n    container_label_com_docker_compose_service=\"backend\"\n  }\n)",
+                    "legendFormat": "__auto",
+                    "range": true,
+                    "refId": "A"
+                }
+            ],
+            "title": "CPU",
+            "type": "gauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "teambeacon-prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "max": 100,
+                    "min": 0,
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": 0
+                            },
+                            {
+                                "color": "red",
+                                "value": 80
+                            }
+                        ]
+                    },
+                    "unit": "percent"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+            },
+            "id": 5,
+            "options": {
+                "minVizHeight": 75,
+                "minVizWidth": 75,
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showThresholdLabels": false,
+                "showThresholdMarkers": true,
+                "sizing": "auto"
+            },
+            "pluginVersion": "12.1.1",
+            "targets": [
+                {
+                    "editorMode": "code",
+                    "expr": "100 *\ncontainer_memory_usage_bytes{\n  container_label_com_docker_compose_service=\"backend\"\n}\n/\ncontainer_spec_memory_limit_bytes{\n  container_label_com_docker_compose_service=\"backend\"\n}",
+                    "legendFormat": "__auto",
+                    "range": true,
+                    "refId": "A"
+                }
+            ],
+            "title": "Backend Memory Usage",
+            "type": "gauge"
+        },
         {
             "datasource": {
                 "type": "prometheus",
@@ -52,7 +182,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 0
+                "y": 16
             },
             "id": 4,
             "options": {
@@ -155,7 +285,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 8
+                "y": 24
             },
             "id": 3,
             "options": {
@@ -254,7 +384,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 16
+                "y": 32
             },
             "id": 2,
             "options": {
@@ -353,7 +483,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 24
+                "y": 40
             },
             "id": 1,
             "options": {
@@ -402,5 +532,5 @@
     "timezone": "browser",
     "title": "TeamBeacon Overview",
     "uid": "e5415c34-3c2f-43de-bd6d-ff5c1c21cd24",
-    "version": 2
+    "version": 1
 }
