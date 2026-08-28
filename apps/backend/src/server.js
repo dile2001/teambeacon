@@ -237,6 +237,18 @@ app.get('/metrics', async (req, res) => {
   res.set('Content-Type', client.register.contentType);
   res.end(await client.register.metrics());
 });
+app.post('/alerts', (req, res) => {
+  console.log(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'alert',
+      event: 'alertmanager_webhook',
+      payload: req.body,
+    })
+  );
+
+  res.sendStatus(200);
+});
 app.listen(PORT, () => {
   console.log(`TeamBeacon backend running on port ${PORT}`);
 });

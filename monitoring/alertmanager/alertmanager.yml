@@ -1,0 +1,14 @@
+route:
+  receiver: teambeacon-default
+  group_by:
+    - alertname
+    - severity
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 4h
+
+receivers:
+  - name: teambeacon-default
+    webhook_configs:
+      - url: http://backend:3000/alerts
+        send_resolved: true

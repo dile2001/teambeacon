@@ -1,0 +1,35 @@
+groups:
+  - name: teambeacon
+    rules:
+      - alert: TeamBeaconBackendDown
+        expr: up{job="teambeacon-backend"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "TeamBeacon backend is down"
+          description: "Prometheus has been unable to scrape the TeamBeacon backend for 30 seconds."
+      - alert: TeamBeaconBackendHighMemory
+        expr: |
+          100 *
+          container_memory_usage_bytes{
+            container_label_com_docker_compose_service="backend"
+          }
+          /
+          container_spec_memory_limit_bytes{
+            container_label_com_docker_compose_service="backend"
+          } > 80
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TeamBeacon backend memory usage is high"
+          description: "Backend memory usage has remained above 80% of its limit for 1 minute."          
+      - alert: TeamBeaconCadvisorDown
+        expr: up{job="cadvisor"} == 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "TeamBeacon cAdvisor is down"
+          description: "Prometheus has been unable to scrape cAdvisor for 30 seconds."          
