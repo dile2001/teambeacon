@@ -3,6 +3,7 @@ const pool = require('./db');
 const crypto = require('crypto');
 const client = require('prom-client');
 const app = express();
+app.use(express.json());
 const httpRequestCounter = new client.Counter({
   name: 'teambeacon_http_requests_total',
   help: 'Total number of HTTP requests',
@@ -49,7 +50,7 @@ app.use((req, res, next) => {
 
   next();
 });
-app.use(express.json());
+
 const PORT = process.env.PORT || 3000;
 
 app.get('/health', (req, res) => {

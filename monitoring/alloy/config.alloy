@@ -1,0 +1,30 @@
+discovery.docker "teambeacon" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "teambeacon" {
+  targets = discovery.docker.teambeacon.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "teambeacon"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "teambeacon" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.teambeacon.output
+  forward_to = [loki.write.teambeacon.receiver]
+}
+
+loki.write "teambeacon" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
