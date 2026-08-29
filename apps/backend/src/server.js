@@ -15,13 +15,30 @@ const httpRequestDuration = new client.Histogram({
   labelNames: ['method', 'path', 'status'],
   buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5]
 });
+let activeRequests = 0;
+const httpRequestsInFlight = new client.Gauge({
+  name: 'teambeacon_http_requests_in_flight',
+  help: 'Number of HTTP requests currently being processed'
+});
 app.use((req, res, next) => {
+  activeRequests++;
+  httpRequestsInFlight.inc();
+  let inFlightCompleted = false;
+
+  const completeInFlightRequest = () => {
+    if (inFlightCompleted) return;
+
+    inFlightCompleted = true;
+    httpRequestsInFlight.dec();
+    activeRequests--;
+  };
   const start = Date.now();
   const request_id = req.get('X-Request-Id') || crypto.randomUUID();
 
   req.requestId = request_id;
   res.setHeader('X-Request-Id', request_id);
   res.on('finish', () => {
+    completeInFlightRequest();
     const level = res.statusCode >= 500 ? 'error' : 'info';
     const duration = Date.now() - start;
     console.log(JSON.stringify({
@@ -47,7 +64,9 @@ app.use((req, res, next) => {
       duration / 1000
     );
   });
-
+  res.on('close', () => {
+    completeInFlightRequest();
+  });
   next();
 });
 
@@ -250,6 +269,27 @@ app.post('/alerts', (req, res) => {
 
   res.sendStatus(200);
 });
-app.listen(PORT, () => {
+
+const server = app.listen(PORT, () => {
   console.log(`TeamBeacon backend running on port ${PORT}`);
 });
+const gracefulShutdown = (signal) => {
+  console.log(`${signal} received. Starting graceful shutdown...`);
+  console.log(`Active requests at shutdown: ${activeRequests}`);
+
+  const shutdownTimeout = setTimeout(() => {
+    console.error('Graceful shutdown timed out.');
+    process.exit(1);
+  }, 10000);
+  server.close(async () => {
+    console.log('HTTP server closed.');
+
+    await pool.end();
+    console.log('PostgreSQL pool closed.');
+
+    clearTimeout(shutdownTimeout);
+  });
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
