@@ -1,5 +1,5 @@
 const express = require('express');
-const { pool, queryWithRetry } = require('./db');
+const { pool, resilientQuery } = require('./db');
 const crypto = require('crypto');
 const client = require('prom-client');
 const app = express();
@@ -139,7 +139,7 @@ app.post('/messages', async (req, res) => {
 
 app.get('/teams', async (req, res) => {
   try {
-    const result = await queryWithRetry(
+    const result = await resilientQuery(
       'SELECT * FROM teams ORDER BY id'
     );
 

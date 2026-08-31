@@ -8,6 +8,12 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   connectionTimeoutMillis: 2000,
 });
+let circuitState = 'CLOSED';
+let failureCount = 0;
+let circuitOpenedAt = null;
+const FAILURE_THRESHOLD = 3;
+const RECOVERY_TIMEOUT_MS = 10000;
+
 pool.on('error', (err) => {
   console.error('Unexpected PostgreSQL pool error:', err);
 });
@@ -21,6 +27,7 @@ function isRetryableError(err) {
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
 async function queryWithRetry(text, params, maxAttempts = 3) {
   let attempt = 1;
 
@@ -47,4 +54,44 @@ async function queryWithRetry(text, params, maxAttempts = 3) {
     }
   }
 }
-module.exports = { pool, queryWithRetry };
+async function resilientQuery(text, params) {
+  if (circuitState === 'HALF_OPEN') {
+    throw new Error('Database circuit breaker is HALF_OPEN');
+  }
+  if (circuitState === 'OPEN') {
+    const timeSinceOpened = Date.now() - circuitOpenedAt;
+
+    if (timeSinceOpened < RECOVERY_TIMEOUT_MS) {
+      throw new Error('Database circuit breaker is OPEN');
+    }
+
+    circuitState = 'HALF_OPEN';
+    console.log('Database circuit breaker is HALF_OPEN.');
+  }
+  try {
+    const result = await queryWithRetry(text, params);
+    if (circuitState === 'HALF_OPEN') {
+      console.log('Database circuit breaker CLOSED.');
+    }
+    failureCount = 0;
+    circuitState = 'CLOSED';
+    return result;
+  } catch (err) {
+    failureCount++;
+    console.error(
+      `Database operation failed. Circuit failure count: ${failureCount}`
+    );
+    if (circuitState === 'HALF_OPEN') {
+      circuitState = 'OPEN';
+      circuitOpenedAt = Date.now();
+      console.error('Database circuit breaker REOPENED.');
+    } else if (failureCount >= FAILURE_THRESHOLD) {
+      circuitState = 'OPEN';
+      circuitOpenedAt = Date.now();
+
+      console.error('Database circuit breaker OPENED.');
+    }
+    throw err;
+  }
+}
+module.exports = { pool, queryWithRetry, resilientQuery };
