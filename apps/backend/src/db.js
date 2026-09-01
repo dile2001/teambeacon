@@ -94,4 +94,47 @@ async function resilientQuery(text, params) {
     throw err;
   }
 }
-module.exports = { pool, queryWithRetry, resilientQuery };
+function getCircuitState() {
+  return circuitState;
+}
+async function checkDatabaseReadiness() {
+  if (circuitState === 'HALF_OPEN') {
+    return false;
+  }
+  if (circuitState === 'OPEN') {
+    const timeSinceOpened = Date.now() - circuitOpenedAt;
+
+    if (timeSinceOpened < RECOVERY_TIMEOUT_MS) {
+      return false;
+    }
+
+    circuitState = 'HALF_OPEN';
+    console.log('Database circuit breaker is HALF_OPEN.');
+  }
+
+  if (circuitState === 'HALF_OPEN') {
+    try {
+      await pool.query('SELECT 1');
+
+      circuitState = 'CLOSED';
+      failureCount = 0;
+
+      console.log('Database circuit breaker CLOSED.');
+      return true;
+    } catch (error) {
+      circuitState = 'OPEN';
+      circuitOpenedAt = Date.now();
+
+      console.error('Database circuit breaker REOPENED.');
+      return false;
+    }
+  }
+
+  try {
+    await pool.query('SELECT 1');
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+module.exports = { pool, queryWithRetry, resilientQuery, getCircuitState, checkDatabaseReadiness };

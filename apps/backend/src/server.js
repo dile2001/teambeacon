@@ -1,5 +1,5 @@
 const express = require('express');
-const { pool, resilientQuery } = require('./db');
+const { pool, resilientQuery, getCircuitState, checkDatabaseReadiness } = require('./db');
 const crypto = require('crypto');
 const client = require('prom-client');
 const app = express();
@@ -71,7 +71,12 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-
+app.get('/health/live', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'teambeacon-backend',
+  });
+});
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -95,6 +100,21 @@ app.get('/health/db', async (req, res) => {
       database: 'disconnected',
     });
   }
+});
+app.get('/health/ready', async (req, res) => {
+  const isReady = await checkDatabaseReadiness();
+
+  if (!isReady) {
+    return res.status(503).json({
+      status: 'not_ready',
+      database: 'unavailable',
+    });
+  }
+
+  res.json({
+    status: 'ready',
+    database: 'connected',
+  });
 });
 app.get('/messages', async (req, res) => {
   try {
