@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: teambeacon-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: teambeacon-backend
+  template:
+    metadata:
+      labels:
+        app: teambeacon-backend
+    spec:
+      containers:
+        - name: teambeacon-backend
+          image: teambeacon-backend:latest
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef:
+                name: teambeacon-backend-config
+            - secretRef:
+                name: teambeacon-db-secret
+          ports:
+            - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
