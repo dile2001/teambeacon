@@ -15,8 +15,15 @@ spec:
     spec:
       containers:
         - name: teambeacon-backend
-          image: teambeacon-backend:latest
+          image: teambeacon-backend:v5
           imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           envFrom:
             - configMapRef:
                 name: teambeacon-backend-config

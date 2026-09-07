@@ -116,7 +116,9 @@ app.get('/health/ready', async (req, res) => {
     database: 'connected',
   });
 });
-app.get('/messages', async (req, res) => {
+const apiRouter = express.Router();
+
+apiRouter.get('/messages', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT * FROM messages'
@@ -132,7 +134,7 @@ app.get('/messages', async (req, res) => {
     });
   }
 });
-app.post('/messages', async (req, res) => {
+apiRouter.post('/messages', async (req, res) => {
   try {
     const { message } = req.body;
     if (!message || typeof message !== 'string' || !message.trim()) {
@@ -157,7 +159,7 @@ app.post('/messages', async (req, res) => {
   }
 });
 
-app.get('/teams', async (req, res) => {
+apiRouter.get('/teams', async (req, res) => {
   try {
     const result = await resilientQuery(
       'SELECT * FROM teams ORDER BY id'
@@ -173,7 +175,7 @@ app.get('/teams', async (req, res) => {
     });
   }
 });
-app.post('/teams', async (req, res) => {
+apiRouter.post('/teams', async (req, res) => {
   try {
     const { name } = req.body;
 
@@ -206,7 +208,7 @@ app.post('/teams', async (req, res) => {
     });
   }
 });
-app.get('/members', async (req, res) => {
+apiRouter.get('/members', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
@@ -231,7 +233,7 @@ app.get('/members', async (req, res) => {
     });
   }
 });
-app.post('/members', async (req, res) => {
+apiRouter.post('/members', async (req, res) => {
   try {
     const { name, team_id } = req.body;
 
@@ -273,6 +275,7 @@ app.post('/members', async (req, res) => {
     });
   }
 });
+
 app.get('/metrics', async (req, res) => {
   res.set('Content-Type', client.register.contentType);
   res.end(await client.register.metrics());
@@ -289,7 +292,7 @@ app.post('/alerts', (req, res) => {
 
   res.sendStatus(200);
 });
-
+app.use('/api', apiRouter);
 const server = app.listen(PORT, () => {
   console.log(`TeamBeacon backend running on port ${PORT}`);
 });

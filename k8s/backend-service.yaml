@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: teambeacon-backend
+spec:
+  selector:
+    app: teambeacon-backend
+
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+
+  type: ClusterIP
