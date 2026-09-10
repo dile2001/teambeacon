@@ -22,14 +22,21 @@ function App() {
 
     loadTeams()
 
-    const interval = setInterval(() => {
-      console.log('Polling tick:', new Date().toLocaleTimeString())
-      loadTeams()
-    }, 5000)
 
+    const eventSource = new EventSource('/api/events')
+    eventSource.onmessage = (event) => {
+      const message = JSON.parse(event.data)
+
+      console.log('SSE event:', message)
+
+      if (message.type === 'team.created') {
+        loadTeams()
+      }
+    }
     return () => {
       console.log('Effect CLEANUP')
-      clearInterval(interval)
+
+      eventSource.close()
     }
   }, [])
 

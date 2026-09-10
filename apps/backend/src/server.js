@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const client = require('prom-client');
 const app = express();
 app.use(express.json());
+const sseClients = new Set()
 const httpRequestCounter = new client.Counter({
   name: 'teambeacon_http_requests_total',
   help: 'Total number of HTTP requests',
@@ -190,8 +191,16 @@ apiRouter.post('/teams', async (req, res) => {
       'INSERT INTO teams (name) VALUES ($1) RETURNING *',
       [name.trim()]
     );
+    const team = result.rows[0]
 
-    res.status(201).json(result.rows[0]);
+    const event = {
+      type: 'team.created',
+      data: team
+    }
+    sseClients.forEach((client) => {
+      client.write(`data: ${JSON.stringify(event)}\n\n`)
+    })
+    res.status(201).json(team);
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({
@@ -292,12 +301,30 @@ app.post('/alerts', (req, res) => {
 
   res.sendStatus(200);
 });
+apiRouter.get('/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+
+  res.write('data: connected\n\n')
+  sseClients.add(res)
+
+  req.on('close', () => {
+
+    sseClients.delete(res)
+    console.log('SSE client disconnected')
+  })
+  //res.send() → sends response → closes connection
+  //res.write() → sends some data → keeps connection open
+  //And SSE requires every message to finish with two newlines:
+  //data: connected\n\n
+})
 app.use('/api', apiRouter);
 const server = app.listen(PORT, () => {
-  console.log(`TeamBeacon backend running on port ${PORT}`);
+  console.log(`TeamBeacon backend running on port ${PORT} `);
 });
 const gracefulShutdown = (signal) => {
-  console.log(`${signal} received. Starting graceful shutdown...`);
+  console.log(`${signal} received.Starting graceful shutdown...`);
   console.log(`Active requests at shutdown: ${activeRequests}`);
 
   const shutdownTimeout = setTimeout(() => {
