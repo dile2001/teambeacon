@@ -18,19 +18,31 @@ function App() {
       })
   }
   useEffect(() => {
-    console.log('Effect START')
+    console.log('Creating TeamBeacon EventSource')
 
     loadTeams()
 
 
     const eventSource = new EventSource('/api/events')
+    eventSource.onopen = () => {
+      console.log('SSE OPEN')
+    }
+
+    eventSource.onerror = (event) => {
+      console.log('SSE ERROR', eventSource.readyState, event)
+    }
     eventSource.onmessage = (event) => {
-      const message = JSON.parse(event.data)
+      try {
+        const message = JSON.parse(event.data)
 
-      console.log('SSE event:', message)
+        console.log('SSE event:', message)
 
-      if (message.type === 'team.created') {
-        loadTeams()
+        if (message.type === 'team.created') {
+          loadTeams()
+        }
+      }
+      catch (error) {
+        console.error('Error parsing SSE event data:', error)
       }
     }
     return () => {

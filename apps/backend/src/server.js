@@ -2,6 +2,17 @@ const express = require('express');
 const { pool, resilientQuery, getCircuitState, checkDatabaseReadiness } = require('./db');
 const crypto = require('crypto');
 const client = require('prom-client');
+const { createClient } = require('redis')
+const redisPublisher = createClient({
+  url: 'redis://redis:6379'
+})
+const redisSubscriber = redisPublisher.duplicate()
+redisPublisher.on('error', (err) => {
+  console.error('Redis error:', err)
+})
+redisSubscriber.on('error', (err) => {
+  console.error('Redis subscriber error:', err)
+})
 const app = express();
 app.use(express.json());
 const sseClients = new Set()
@@ -177,6 +188,7 @@ apiRouter.get('/teams', async (req, res) => {
   }
 });
 apiRouter.post('/teams', async (req, res) => {
+  let team = {};
   try {
     const { name } = req.body;
 
@@ -191,16 +203,7 @@ apiRouter.post('/teams', async (req, res) => {
       'INSERT INTO teams (name) VALUES ($1) RETURNING *',
       [name.trim()]
     );
-    const team = result.rows[0]
-
-    const event = {
-      type: 'team.created',
-      data: team
-    }
-    sseClients.forEach((client) => {
-      client.write(`data: ${JSON.stringify(event)}\n\n`)
-    })
-    res.status(201).json(team);
+    team = result.rows[0];
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({
@@ -211,11 +214,25 @@ apiRouter.post('/teams', async (req, res) => {
 
     console.error('Failed to create team:', error);
 
-    res.status(500).json({
+    return res.status(500).json({
       status: 'error',
       message: 'Failed to create team'
     });
   }
+  try {
+    console.log('Publishing team.created to Redis')
+    const event = {
+      type: 'team.created',
+      data: team
+    }
+    await redisPublisher.publish(
+      'teambeacon-events',
+      JSON.stringify(event)
+    )
+  } catch (error) {
+    console.error('Failed to publish team.created event:', error)
+  }
+  res.status(201).json(team);
 });
 apiRouter.get('/members', async (req, res) => {
   try {
@@ -308,21 +325,68 @@ apiRouter.get('/events', (req, res) => {
 
   res.write('data: connected\n\n')
   sseClients.add(res)
-
+  console.log('SSE client connected. Total:', sseClients.size)
+  const heartbeat = setInterval(() => {
+    res.write(': heartbeat\n\n')
+  }, 15000)
   req.on('close', () => {
-
+    clearInterval(heartbeat)
     sseClients.delete(res)
-    console.log('SSE client disconnected')
+    console.log('SSE client disconnected. Total:', sseClients.size)
   })
   //res.send() → sends response → closes connection
   //res.write() → sends some data → keeps connection open
   //And SSE requires every message to finish with two newlines:
   //data: connected\n\n
 })
+redisPublisher.on('ready', () => {
+  console.log('Redis publisher READY')
+})
+redisPublisher.on('reconnecting', () => {
+  console.log('Redis publisher RECONNECTING')
+})
+
+redisPublisher.on('end', () => {
+  console.log('Redis publisher END')
+})
+redisSubscriber.on('ready', () => {
+  console.log('Redis subscriber READY')
+})
+
+redisSubscriber.on('reconnecting', () => {
+  console.log('Redis subscriber RECONNECTING')
+})
+
+redisSubscriber.on('end', () => {
+  console.log('Redis subscriber END')
+})
 app.use('/api', apiRouter);
-const server = app.listen(PORT, () => {
-  console.log(`TeamBeacon backend running on port ${PORT} `);
-});
+let server;
+async function startServer() {
+
+  server = app.listen(PORT, () => {
+    console.log(`TeamBeacon backend running on port ${PORT}`);
+  });
+  try {
+
+    await redisPublisher.connect()
+    await redisSubscriber.connect()
+    console.log('Connected Redis publisher and subscriber')
+    await redisSubscriber.subscribe('teambeacon-events', (message) => {
+
+      console.log(
+        'Redis event received. Local SSE clients:',
+        sseClients.size
+      )
+      sseClients.forEach((client) => {
+        client.write(`data: ${message}\n\n`)
+      })
+    })
+    console.log('Redis subscriber SUBSCRIBED to teambeacon-events')
+  } catch (error) {
+    console.error('Failed to connect Redis publisher or subscriber:', error)
+  }
+}
 const gracefulShutdown = (signal) => {
   console.log(`${signal} received.Starting graceful shutdown...`);
   console.log(`Active requests at shutdown: ${activeRequests}`);
@@ -331,15 +395,28 @@ const gracefulShutdown = (signal) => {
     console.error('Graceful shutdown timed out.');
     process.exit(1);
   }, 10000);
-  server.close(async () => {
-    console.log('HTTP server closed.');
+  console.log(`Closing ${sseClients.size} SSE clients...`);
 
-    await pool.end();
-    console.log('PostgreSQL pool closed.');
+  sseClients.forEach((client) => {
+    client.end()
+  })
 
-    clearTimeout(shutdownTimeout);
-  });
+  sseClients.clear()
+  if (server) {
+    server.close(async () => {
+      console.log('HTTP server closed.');
+
+      await pool.end();
+      console.log('PostgreSQL pool closed.');
+
+      clearTimeout(shutdownTimeout);
+    });
+  }
 };
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+startServer().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
+});
