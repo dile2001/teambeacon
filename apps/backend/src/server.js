@@ -32,6 +32,13 @@ const httpRequestsInFlight = new client.Gauge({
   name: 'teambeacon_http_requests_in_flight',
   help: 'Number of HTTP requests currently being processed'
 });
+const realtimeHealthGauge = new client.Gauge({
+
+  name: 'teambeacon_realtime_healthy',
+
+  help: 'Whether TeamBeacon realtime messaging is healthy (1 = healthy, 0 = degraded)'
+
+});
 app.use((req, res, next) => {
   activeRequests++;
   httpRequestsInFlight.inc();
@@ -129,7 +136,18 @@ app.get('/health/ready', async (req, res) => {
   });
 });
 const apiRouter = express.Router();
+apiRouter.get('/health/realtime', (req, res) => {
 
+  const healthy = redisPublisher.isReady && redisSubscriber.isReady
+
+  res.json({
+    status: healthy ? 'healthy' : 'degraded',
+    publisherReady: redisPublisher.isReady,
+    subscriberReady: redisSubscriber.isReady,
+    sseClients: sseClients.size
+  })
+
+})
 apiRouter.get('/messages', async (req, res) => {
   try {
     const result = await pool.query(
@@ -302,7 +320,11 @@ apiRouter.post('/members', async (req, res) => {
   }
 });
 
-app.get('/metrics', async (req, res) => {
+apiRouter.get('/metrics', async (req, res) => {
+  const realtimeHealthy =
+    redisPublisher.isReady && redisSubscriber.isReady
+
+  realtimeHealthGauge.set(realtimeHealthy ? 1 : 0)
   res.set('Content-Type', client.register.contentType);
   res.end(await client.register.metrics());
 });
@@ -341,9 +363,13 @@ apiRouter.get('/events', (req, res) => {
 })
 redisPublisher.on('ready', () => {
   console.log('Redis publisher READY')
+  console.log('Publisher isOpen:', redisPublisher.isOpen)
+  console.log('Publisher isReady:', redisPublisher.isReady)
 })
 redisPublisher.on('reconnecting', () => {
   console.log('Redis publisher RECONNECTING')
+  console.log('reconnecting Publisher isOpen:', redisPublisher.isOpen)
+  console.log('reconnecting Publisher isReady:', redisPublisher.isReady)
 })
 
 redisPublisher.on('end', () => {
@@ -351,10 +377,14 @@ redisPublisher.on('end', () => {
 })
 redisSubscriber.on('ready', () => {
   console.log('Redis subscriber READY')
+  console.log('Subscriber isOpen:', redisSubscriber.isOpen)
+  console.log('Subscriber isReady:', redisSubscriber.isReady)
 })
 
 redisSubscriber.on('reconnecting', () => {
   console.log('Redis subscriber RECONNECTING')
+  console.log('reconnecting Subscriber isOpen:', redisSubscriber.isOpen)
+  console.log('reconnecting Subscriber isReady:', redisSubscriber.isReady)
 })
 
 redisSubscriber.on('end', () => {

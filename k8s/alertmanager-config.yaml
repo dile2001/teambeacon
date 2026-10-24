@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+data:
+  alertmanager.yml: |
+    route:
+      receiver: 'teambeacon-default'
+
+    receivers:
+      - name: 'teambeacon-default'

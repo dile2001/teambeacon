@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+data:
+  teambeacon-rules.yaml: |
+    groups:
+      - name: teambeacon
+        rules:
+          - alert: TeamBeaconRealtimeDegraded
+            expr: teambeacon_realtime_healthy == 0
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: TeamBeacon realtime messaging is degraded
+              description: Redis publisher or subscriber has been unavailable for at least 30 seconds.

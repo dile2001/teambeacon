@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: teambeacon-backend
-          image: teambeacon-backend:v3.3
+          image: teambeacon-backend:v3.9
           imagePullPolicy: Never
           resources:
             requests:
