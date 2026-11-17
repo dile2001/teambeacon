@@ -15,3 +15,11 @@ data:
             annotations:
               summary: TeamBeacon realtime messaging is degraded
               description: Redis publisher or subscriber has been unavailable for at least 30 seconds.
+          - alert: TeamBeaconBackendDown
+            expr: up{job="teambeacon-backend"} == 0
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: TeamBeacon backend is down
+              description: Prometheus has been unable to scrape the TeamBeacon backend for at least 30 seconds.

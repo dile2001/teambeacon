@@ -417,7 +417,15 @@ async function startServer() {
     console.error('Failed to connect Redis publisher or subscriber:', error)
   }
 }
+let isShuttingDown = false;
 const gracefulShutdown = (signal) => {
+  if (isShuttingDown) {
+    console.log(`Shutdown already in progress. Ignoring ${signal}.`);
+    return;
+  }
+
+  isShuttingDown = true;
+
   console.log(`${signal} received.Starting graceful shutdown...`);
   console.log(`Active requests at shutdown: ${activeRequests}`);
 
@@ -439,7 +447,20 @@ const gracefulShutdown = (signal) => {
       await pool.end();
       console.log('PostgreSQL pool closed.');
 
+      if (redisSubscriber.isOpen) {
+        await redisSubscriber.quit();
+        console.log('Redis subscriber closed.');
+      }
+
+      if (redisPublisher.isOpen) {
+        await redisPublisher.quit();
+        console.log('Redis publisher closed.');
+      }
+
       clearTimeout(shutdownTimeout);
+
+      console.log('Graceful shutdown complete.');
+      process.exit(0);
     });
   }
 };
