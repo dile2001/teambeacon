@@ -20,5 +20,5 @@ data:
             send_resolved: true
       - name: 'teambeacon-critical'
         webhook_configs:
-          - url: 'http://teambeacon-backend:80/alerts'
+          - url: 'http://alert-adapter/alerts'
             send_resolved: true

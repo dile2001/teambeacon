@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: teambeacon-backend
-          image: teambeacon-backend:v3.9
+          image: teambeacon-backend:v10.1
           imagePullPolicy: Never
           resources:
             requests:
@@ -43,3 +43,9 @@ spec:
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: teambeacon-jwt
+                  key: JWT_SECRET

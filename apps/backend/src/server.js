@@ -2,7 +2,14 @@ const express = require('express');
 const { pool, resilientQuery, getCircuitState, checkDatabaseReadiness } = require('./db');
 const crypto = require('crypto');
 const client = require('prom-client');
-const { createClient } = require('redis')
+const { createClient } = require('redis');
+const jwt = require('jsonwebtoken');
+const { authenticateToken } = require('./middleware/auth');
+const { requireRole } = require('./middleware/authorize');
+if (!process.env.JWT_SECRET) {
+  console.error('JWT_SECRET is required');
+  process.exit(1);
+}
 const redisPublisher = createClient({
   url: 'redis://redis:6379'
 })
@@ -136,6 +143,21 @@ app.get('/health/ready', async (req, res) => {
   });
 });
 const apiRouter = express.Router();
+apiRouter.get('/auth/me', authenticateToken, (req, res) => {
+  res.json({
+    user: req.user
+  });
+});
+apiRouter.post(
+  '/auth/admin-test',
+  authenticateToken,
+  requireRole('admin'),
+  (req, res) => {
+    res.json({
+      message: 'Admin access granted'
+    });
+  }
+);
 apiRouter.get('/health/realtime', (req, res) => {
 
   const healthy = redisPublisher.isReady && redisSubscriber.isReady
@@ -163,6 +185,29 @@ apiRouter.get('/messages', async (req, res) => {
       message: 'Failed to get messages'
     });
   }
+});
+apiRouter.post('/auth/login', (req, res) => {
+  const { username, password } = req.body;
+
+  if (username !== 'di' || password !== 'teambeacon123') {
+    return res.status(401).json({
+      error: 'Invalid username or password'
+    });
+  }
+
+  const token = jwt.sign(
+    {
+      userId: 1,
+      username: 'di',
+      role: 'admin'
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: '15m'
+    }
+  );
+
+  res.json({ token });
 });
 apiRouter.post('/messages', async (req, res) => {
   try {
@@ -205,53 +250,57 @@ apiRouter.get('/teams', async (req, res) => {
     });
   }
 });
-apiRouter.post('/teams', async (req, res) => {
-  let team = {};
-  try {
-    const { name } = req.body;
+apiRouter.post(
+  '/teams',
+  authenticateToken,
+  requireRole('admin'),
+  async (req, res) => {
+    let team = {};
+    try {
+      const { name } = req.body;
 
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Team name is required'
+        });
+      }
+
+      const result = await pool.query(
+        'INSERT INTO teams (name) VALUES ($1) RETURNING *',
+        [name.trim()]
+      );
+      team = result.rows[0];
+    } catch (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({
+          status: 'error',
+          message: 'Team already exists'
+        });
+      }
+
+      console.error('Failed to create team:', error);
+
+      return res.status(500).json({
         status: 'error',
-        message: 'Team name is required'
+        message: 'Failed to create team'
       });
     }
-
-    const result = await pool.query(
-      'INSERT INTO teams (name) VALUES ($1) RETURNING *',
-      [name.trim()]
-    );
-    team = result.rows[0];
-  } catch (error) {
-    if (error.code === '23505') {
-      return res.status(409).json({
-        status: 'error',
-        message: 'Team already exists'
-      });
+    try {
+      console.log('Publishing team.created to Redis')
+      const event = {
+        type: 'team.created',
+        data: team
+      }
+      await redisPublisher.publish(
+        'teambeacon-events',
+        JSON.stringify(event)
+      )
+    } catch (error) {
+      console.error('Failed to publish team.created event:', error)
     }
-
-    console.error('Failed to create team:', error);
-
-    return res.status(500).json({
-      status: 'error',
-      message: 'Failed to create team'
-    });
-  }
-  try {
-    console.log('Publishing team.created to Redis')
-    const event = {
-      type: 'team.created',
-      data: team
-    }
-    await redisPublisher.publish(
-      'teambeacon-events',
-      JSON.stringify(event)
-    )
-  } catch (error) {
-    console.error('Failed to publish team.created event:', error)
-  }
-  res.status(201).json(team);
-});
+    res.status(201).json(team);
+  });
 apiRouter.get('/members', async (req, res) => {
   try {
     const result = await pool.query(`
