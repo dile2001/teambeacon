@@ -6,6 +6,7 @@ const { createClient } = require('redis');
 const jwt = require('jsonwebtoken');
 const { authenticateToken } = require('./middleware/auth');
 const { requireRole } = require('./middleware/authorize');
+const bcrypt = require('bcrypt');
 if (!process.env.JWT_SECRET) {
   console.error('JWT_SECRET is required');
   process.exit(1);
@@ -186,28 +187,56 @@ apiRouter.get('/messages', async (req, res) => {
     });
   }
 });
-apiRouter.post('/auth/login', (req, res) => {
+apiRouter.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
 
-  if (username !== 'di' || password !== 'teambeacon123') {
-    return res.status(401).json({
-      error: 'Invalid username or password'
+  if (!username || !password) {
+    return res.status(400).json({
+      error: 'Username and password are required'
     });
   }
+  try {
+    const result = await pool.query(
+      `SELECT id, username, password_hash, role
+       FROM users
+       WHERE username = $1`,
+      [username]
+    );
 
-  const token = jwt.sign(
-    {
-      userId: 1,
-      username: 'di',
-      role: 'admin'
-    },
-    process.env.JWT_SECRET,
-    {
-      expiresIn: '15m'
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        error: 'Invalid username or password'
+      });
     }
-  );
 
-  res.json({ token });
+    const user = result.rows[0];
+
+    const passwordMatches = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
+
+    if (!passwordMatches) {
+      return res.status(401).json({
+        error: 'Invalid username or password'
+      });
+    }
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        username: user.username,
+        role: user.role
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+    return res.json({ token });
+  } catch (error) {
+    console.error('Login failed:', error);
+    return res.status(500).json({
+      error: 'Internal server error'
+    });
+  }
 });
 apiRouter.post('/messages', async (req, res) => {
   try {
