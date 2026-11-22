@@ -187,10 +187,103 @@ apiRouter.get('/messages', async (req, res) => {
     });
   }
 });
+const VALID_ROLES = ['admin', 'viewer'];
+apiRouter.post(
+  '/users',
+  authenticateToken,
+  requireRole('admin'),
+  async (req, res) => {
+    const { username, password, role = 'viewer' } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        error: 'Username and password are required'
+      });
+    }
+    const normalizedUsername =
+      typeof username === 'string'
+        ? username.trim().toLowerCase()
+        : '';
+    if (normalizedUsername.length < 3) {
+      return res.status(400).json({
+        error: 'Username must be at least 3 characters'
+      });
+    }
+
+    if (typeof password !== 'string' || password.length < 10) {
+      return res.status(400).json({
+        error: 'Password must be at least 10 characters'
+      });
+    }
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({
+        error: 'Invalid role'
+      });
+    }
+
+    try {
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      const result = await pool.query(
+        `INSERT INTO users (username, password_hash, role)
+     VALUES ($1, $2, $3)
+     RETURNING id, username, role, created_at`,
+        [normalizedUsername, passwordHash, role]
+      );
+
+      return res.status(201).json({
+        user: result.rows[0]
+      });
+    } catch (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({
+          error: 'Username already exists'
+        });
+      }
+
+      console.error('Create user failed:', error);
+
+      return res.status(500).json({
+        error: 'Internal server error'
+      });
+    }
+  }
+);
+apiRouter.get(
+  '/users',
+  authenticateToken,
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, username, role, created_at
+         FROM users
+         ORDER BY id`
+      );
+
+      return res.json(result.rows);
+    } catch (error) {
+      console.error('Get users failed:', error);
+
+      return res.status(500).json({
+        error: 'Internal server error'
+      });
+    }
+  }
+);
 apiRouter.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
+    return res.status(400).json({
+      error: 'Username and password are required'
+    });
+  }
+  const normalizedUsername =
+    typeof username === 'string'
+      ? username.trim().toLowerCase()
+      : '';
+  if (!normalizedUsername || !password) {
     return res.status(400).json({
       error: 'Username and password are required'
     });
@@ -200,7 +293,7 @@ apiRouter.post('/auth/login', async (req, res) => {
       `SELECT id, username, password_hash, role
        FROM users
        WHERE username = $1`,
-      [username]
+      [normalizedUsername]
     );
 
     if (result.rows.length === 0) {
